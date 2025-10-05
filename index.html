@@ -1,0 +1,547 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Face Studio - Editor Foto AI</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configure Tailwind for custom styles and Inter font -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        // Mengubah warna primer menjadi biru langit cerah
+                        'primary-blue': '#0EA5E9', // sky-500
+                        'secondary-gray': '#F3F4F6',
+                        'dark-bg': '#1F2937',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Mengatur font Inter */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        
+        /* Background Awan Putih */
+        .cloud-background {
+            background-color: #F0F9FF; /* soft sky blue */
+            background-image: 
+                radial-gradient(rgba(255,255,255,0.7) 20%, transparent 20%), 
+                radial-gradient(rgba(255,255,255,0.7) 20%, transparent 20%);
+            background-size: 100px 100px;
+            background-position: 0 0, 50px 50px;
+        }
+
+        /* Style kustom untuk tombol dan input */
+        .upload-area {
+            border: 2px dashed #93C5FD; /* border-blue-300 */
+            background-color: #F9FAFB;
+            transition: all 0.2s;
+        }
+        .upload-area:hover {
+            border-color: #0EA5E9; /* primary-blue */
+            background-color: #E0F2FE; /* sky-100 */
+        }
+        .image-placeholder {
+            min-height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6B7280;
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #0EA5E9; /* primary-blue */
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Custom styling for the output image container */
+        #output-image-container {
+            min-height: 400px;
+            background-color: #E0F2FE; /* sky-100 */
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        #output-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 0.75rem;
+        }
+
+        /* Watermark style */
+        #watermark {
+            position: fixed;
+            bottom: 4px; /* Sedikit lebih tinggi dari tepi bawah */
+            right: 4px; /* Sedikit lebih ke kiri dari tepi kanan */
+            padding: 4px 8px;
+            font-size: 0.75rem; /* text-xs */
+            color: #6B7280; /* text-gray-500 */
+            background-color: rgba(255, 255, 255, 0.7);
+            border-radius: 0.5rem;
+            z-index: 100; /* Pastikan di atas elemen lain */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="cloud-background font-sans min-h-screen p-4 sm:p-8 relative"> <!-- Tambahkan relative ke body -->
+    <div class="max-w-6xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Gemini Face Studio 🎨</h1>
+            <p class="text-gray-600">Ubah foto model Anda sambil <span class="font-bold text-primary-blue">mempertahankan detail semua wajah asli.</span></p>
+        </header>
+
+        <div class="grid lg:grid-cols-3 gap-8">
+            <!-- Kolom 1: Kontrol Input & Unggahan -->
+            <div class="lg:col-span-1 space-y-6 p-6 bg-white rounded-xl shadow-xl border border-blue-100 h-fit">
+                <h2 class="text-2xl font-bold text-gray-800 border-b pb-3 mb-4">Pengaturan Gambar</h2>
+
+                <!-- Unggah Foto Model -->
+                <div>
+                    <label for="model-upload" class="block text-sm font-medium text-gray-700 mb-2">1. Unggah Foto Model Anda (Wajib)</label>
+                    <input type="file" id="model-upload" accept="image/*" class="hidden" onchange="handleFileUpload(event, 'model')">
+                    <div id="model-preview-container" class="upload-area rounded-lg p-4 cursor-pointer" onclick="document.getElementById('model-upload').click()">
+                        <div id="model-placeholder" class="image-placeholder text-center">
+                            Klik untuk Unggah atau Seret Foto Model
+                        </div>
+                        <img id="model-preview" class="hidden w-full h-auto max-h-48 object-contain rounded-md mx-auto" alt="Pratinjau Foto Model">
+                    </div>
+                </div>
+
+                <!-- Pilihan Gaya (Model Gambar) -->
+                <div>
+                    <label for="style-model" class="block text-sm font-medium text-gray-700 mb-2">2. Pilih Gaya Model Gambar</label>
+                    <select id="style-model" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" onchange="updatePrompt()">
+                        <option value="A highly detailed and expressive 3D rendered character portrait, similar to Pixar animation" data-aspect="1:1">3D Pixar</option>
+                        <option value="A vibrant, classic 2D animation style, hand-drawn and full of emotion, like classic Disney films" data-aspect="1:1">Disney</option>
+                        <option value="An exaggerated, humorous caricature emphasizing unique features, with bold lines and vibrant colors" data-aspect="4:3">Karikatur</option>
+                        <option value="A highly saturated, action-packed graphic novel or comic book style, with heavy inking and bold colors" data-aspect="4:3">Komik (Comic Book Style)</option>
+                        <option value="A clean, sharp digital illustration combining vector art with soft painting elements, resulting in smooth transitions and vibrant colors" data-aspect="3:4">Ilustrasi Digital Vector + Painting</option>
+                        <option value="A detailed pencil sketch drawing on textured paper, focusing on shadows and realistic texture" data-aspect="3:4">Lukisan Pensil</option>
+                        <option value="A stunning oil painting, utilizing thick impasto textures and dramatic brushstrokes" data-aspect="16:9">Painting (Cat Minyak)</option>
+                        <option value="A contemporary digital art piece rendered on a rough canvas texture, cinematic and sharp" data-aspect="4:3">Canvas (Digital)</option>
+                    </select>
+                </div>
+
+                <!-- Pilihan Profesi -->
+                <div>
+                    <label for="profession" class="block text-sm font-medium text-gray-700 mb-2">3. Profesi (Opsional)</label>
+                    <select id="profession" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" onchange="updatePrompt()">
+                        <option value="">-- Pilih Profesi (Opsional) --</option>
+                        <option value="dressed in professional teacher attire, standing in a brightly lit classroom">Guru</option>
+                        <option value="dressed in a detailed police uniform, standing by a patrol car">Polisi</option>
+                        <option value="dressed in full military combat gear, in a rugged outdoor setting">Tentara</option>
+                        <option value="dressed in clean scrubs and a lab coat, standing in a hospital setting">Dokter</option>
+                        <option value="wearing firefighter protective gear, holding a hose">Pemadam Kebakaran</option>
+                        <option value="dressed in a female police uniform, performing duties">Polwan</option>
+                        <option value="wearing a pilot uniform in a cockpit">Pilot</option>
+                        <option value="dressed as a train conductor/machinist, standing in a train cabin">Masinis</option>
+                        <option value="on stage with a microphone, under spotlight">Penyanyi</option>
+                        <option value="wearing a spacesuit, floating in space with the Earth in the background">Astronot</option>
+                    </select>
+                </div>
+
+                <!-- Input Quotes -->
+                <div>
+                    <label for="quotes" class="block text-sm font-medium text-gray-700 mb-2">4. Quotes/Kata-kata (Di Gambar)</label>
+                    <input type="text" id="quotes" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" placeholder="Misal: 'Semangat Pagi!' atau 'Always be kind'" oninput="updatePrompt()">
+                    <p class="text-xs text-gray-500 mt-1">Quotes ini akan coba ditampilkan di **tengah bawah hasil gambar** dengan font cantik.</p>
+                </div>
+
+                <!-- Pengaturan Lainnya -->
+                <div class="grid grid-cols-2 gap-4 border-t pt-4">
+                    <!-- Rasio Aspek -->
+                    <div>
+                        <label for="aspect-ratio" class="block text-sm font-medium text-gray-700 mb-2">Rasio Aspek</label>
+                        <select id="aspect-ratio" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" onchange="updatePrompt()">
+                            <option value="1:1 aspect ratio">1:1 (Kotak)</option>
+                            <option value="4:3 aspect ratio">4:3 (Lanskap)</option>
+                            <option value="16:9 aspect ratio">16:9 (Layar Lebar)</option>
+                            <option value="3:4 aspect ratio">3:4 (Potret)</option>
+                        </select>
+                    </div>
+                    <!-- Pencahayaan -->
+                    <div>
+                        <label for="lighting" class="block text-sm font-medium text-gray-700 mb-2">Gaya Pencahayaan</label>
+                        <select id="lighting" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" onchange="updatePrompt()">
+                            <option value="Professional studio lighting, soft box lighting">Studio Lighting</option>
+                            <option value="Golden hour light, dramatic rim lighting, warm tones">Golden Hour</option>
+                            <option value="Cinematic film noir lighting, high contrast, heavy shadows">Cinematic Noir</option>
+                            <option value="Soft, diffused ambient lighting, natural and gentle">Soft Ambient</option>
+                        </select>
+                    </div>
+                    <!-- Perspektif Kamera -->
+                    <div>
+                        <label for="perspective" class="block text-sm font-medium text-gray-700 mb-2">Perspektif Kamera</label>
+                        <select id="perspective" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" onchange="updatePrompt()">
+                            <option value="A close-up portrait shot of the face">Close-up (Wajah)</option>
+                            <option value="A full body shot, showing environment">Full Body (Seluruh Tubuh)</option>
+                            <option value="An overhead shot, from above the model">Overhead Shot (Atas)</option>
+                            <option value="A low angle shot, looking up at the model, powerful view">Low Angle (Rendah)</option>
+                        </select>
+                    </div>
+                    <!-- Latar Belakang/Letak -->
+                    <div>
+                        <label for="background" class="block text-sm font-medium text-gray-700 mb-2">Latar Belakang/Letak</label>
+                        <select id="background" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue" onchange="updatePrompt()">
+                            <!-- Warna Polos / Solid Colors -->
+                            <optgroup label="Warna Polos Minimalis">
+                                <option value="Minimalist pure white background, clean and simple">Putih (Minimalis)</option>
+                                <option value="Solid matte black background, deep and dramatic">Hitam (Matte)</option>
+                                <option value="Solid vibrant red color background">Merah Terang</option>
+                                <option value="Solid sunny yellow color background">Kuning Cerah</option>
+                                <option value="Solid forest green color background">Hijau Hutan</option>
+                                <option value="Solid deep blue color background">Biru Tua</option>
+                                <option value="Solid vibrant orange color background">Oranye Terang</option>
+                                <option value="Solid gentle gray color background">Abu-abu Lembut</option>
+                                <option value="Solid bright pink color background">Merah Muda (Pink)</option>
+                                <option value="Solid royal purple color background">Ungu Raja</option>
+                            </optgroup>
+                            <!-- Gradasi / Gradients -->
+                            <optgroup label="Gradasi (Gradient)">
+                                <option value="Smooth gradient background transitioning from red to yellow to green">Gradasi Merah-Kuning-Hijau</option>
+                                <option value="Smooth gradient background transitioning from blue to purple to pink">Gradasi Biru-Ungu-Pink</option>
+                                <option value="Dark gradient background transitioning from black to deep orange to purple">Gradasi Gelap (Hitam-Oranye-Ungu)</option>
+                            </optgroup>
+                            <!-- Scene / Tempat -->
+                            <optgroup label="Latar Belakang Scene">
+                                <option value="A bustling street market in Jakarta, Indonesia">Pasar Tradisional Jakarta</option>
+                                <option value="Ancient stone temple ruins covered in jungle vines, like Borobudur">Reruntuhan Kuil Kuno</option>
+                                <option value="A neon-lit cyberpunk city street at night">Kota Cyberpunk</option>
+                                <option value="An ethereal, foggy forest with glowing elements">Hutan Mistis</option>
+                                <option value="A sunny tropical beach at sunset">Pantai Tropis</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Pesan tentang fitur multi-wajah -->
+                <div class="border-t pt-4">
+                    <p class="text-sm text-gray-500 italic p-2 bg-blue-50 rounded-lg">
+                        Instruksi AI telah disesuaikan untuk merender **SEMUA WAJAH** dalam foto berpasangan atau grup.
+                    </p>
+                </div>
+
+            </div>
+
+            <!-- Kolom 2: Prompt dan Hasil Gambar -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Kotak Prompt -->
+                <div class="p-6 bg-white rounded-xl shadow-xl border border-blue-100">
+                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-3 mb-4">Prompt AI Super Detail</h2>
+                    <textarea id="ai-prompt" rows="6" class="w-full p-3 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm" readonly placeholder="Prompt AI akan dibuat secara otomatis di sini berdasarkan pilihan Anda..."></textarea>
+                    <p class="text-xs text-gray-500 mt-2">Instruksi ini sekarang menyertakan perintah untuk **mempertahankan wajah asli (termasuk foto berpasangan)** dan **menulis quotes di gambar**.</p>
+                </div>
+
+                <!-- Tombol Aksi -->
+                <button id="generate-button" onclick="startGeneration()" class="w-full flex items-center justify-center p-4 text-white font-semibold rounded-xl bg-primary-blue hover:bg-sky-600 transition duration-300 shadow-md disabled:bg-gray-400" disabled>
+                    <span id="generate-text">✨ Buat Gambar AI / Generate Ulang</span>
+                    <div id="generate-loading" class="hidden loading-spinner ml-2"></div>
+                </button>
+                
+                <!-- Area Pesan/Error -->
+                <div id="message-area" class="text-sm p-3 rounded-lg hidden"></div>
+
+                <!-- Area Hasil Gambar -->
+                <div class="p-6 bg-white rounded-xl shadow-xl border border-blue-100">
+                    <h2 class="text-2xl font-bold text-gray-800 border-b pb-3 mb-4">Hasil Gambar AI</h2>
+                    <div id="output-image-container">
+                        <img id="output-image" class="hidden" alt="Hasil Gambar AI">
+                        <div id="initial-placeholder" class="image-placeholder">Gambar yang dihasilkan akan muncul di sini</div>
+                    </div>
+                    
+                    <!-- DOWNLOAD BUTTON -->
+                    <div id="download-area" class="mt-4 flex justify-center hidden">
+                        <a id="download-button" onclick="downloadImage()" href="#" class="flex items-center text-sm text-white bg-primary-blue hover:bg-sky-600 p-3 rounded-lg transition font-semibold">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L10 12.586l2.293-2.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                            Unduh Gambar
+                        </a>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    
+    <!-- Watermark/Hak Cipta di Kanan Bawah -->
+    <div id="watermark">
+        Create by SatriaStudio @2025
+    </div>
+
+    <script type="module">
+        // Global variables for image data and API
+        let modelImageBase64 = null;
+        let modelImageMimeType = null;
+        let currentImageUrl = null; 
+        const apiKey = ""; // API Key is handled by the Canvas environment
+
+        const NANO_BANANA_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
+
+        // Utility: Convert File to Base64
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        // Handler for file uploads
+        window.handleFileUpload = async (event, type) => {
+            const file = event.target.files[0];
+            const previewId = `${type}-preview`;
+            const placeholderId = `${type}-placeholder`;
+            
+            if (!file) return;
+
+            try {
+                const base64DataUrl = await fileToBase64(file);
+                const [mimeType, base64Data] = base64DataUrl.split(';base64,');
+
+                document.getElementById(placeholderId).classList.add('hidden');
+                const previewImg = document.getElementById(previewId);
+                previewImg.src = base64DataUrl;
+                previewImg.classList.remove('hidden');
+
+                if (type === 'model') {
+                    modelImageBase64 = base64Data;
+                    modelImageMimeType = mimeType.split(':')[1];
+                    document.getElementById('generate-button').disabled = false;
+                } 
+                
+                updatePrompt();
+                showMessage('', 'hidden');
+
+            } catch (error) {
+                console.error("Error converting file to base64:", error);
+                showMessage('Gagal mengunggah gambar. Pastikan format file benar.', 'bg-red-100 text-red-700');
+            }
+        };
+
+        // Utility: Display Message
+        function showMessage(text, className) {
+            const area = document.getElementById('message-area');
+            area.textContent = text;
+            area.className = `text-sm p-3 rounded-lg ${className}`;
+            if (className.includes('hidden')) {
+                area.classList.add('hidden');
+            } else {
+                area.classList.remove('hidden');
+            }
+        }
+
+        // Function to build the super-detailed prompt
+        window.updatePrompt = () => {
+            const styleModel = document.getElementById('style-model').value;
+            const profession = document.getElementById('profession').value; 
+            const quotes = document.getElementById('quotes').value.trim(); 
+            const lighting = document.getElementById('lighting').value;
+            const perspective = document.getElementById('perspective').value;
+            const background = document.getElementById('background').value;
+            const aspectRatio = document.getElementById('aspect-ratio').value;
+            const promptBox = document.getElementById('ai-prompt');
+
+            let prompt = "";
+            let professionContext = "";
+            let quotesInstruction = ""; 
+
+            // Handle Profession
+            if (profession) {
+                professionContext = `The subject should be specifically rendered as a person ${profession}. `;
+            }
+
+            // Handle Quotes (NEW LOGIC: Put on image)
+            if (quotes) {
+                 quotesInstruction = `Add the exact text/quote "${quotes}" displayed clearly in a beautiful, elegant font (like calligraphy or stylized sans-serif) at the bottom center of the resulting image. Ensure the text is highly legible and appropriately sized for the composition.`;
+            }
+
+
+            // Build the main prompt with PRIORITY instruction for multiple faces
+            prompt = `PRIORITY: **PRESERVE the original face identity and features** of the uploaded subject(s). If there are multiple people/faces in the uploaded photo, ensure **ALL FACES** are preserved with the same fidelity and detail. The rendered face(s) MUST look exactly like the person(s) in the photo.
+Re-render the model/subject from the primary uploaded photo based on the following art direction. 
+${professionContext}
+**STYLE**: ${styleModel}
+**LIGHTING**: ${lighting}
+**PERSPECTIVE**: ${perspective}
+**LOCATION/BACKGROUND**: ${background}
+**TEXT/QUOTE**: ${quotesInstruction}
+**QUALITY**: Highly detailed, ultra-realistic texture, photorealistic, 8k, cinematic, professional grade, ${aspectRatio}.`;
+
+            promptBox.value = prompt.trim().replace(/\s*[\r\n]+\s*/g, '\n').trim();
+
+            if (modelImageBase64) {
+                document.getElementById('generate-button').disabled = false;
+            } else {
+                document.getElementById('generate-button').disabled = true;
+            }
+        };
+
+        // Utility: Exponential Backoff Retry mechanism
+        async function fetchWithRetry(url, payload, maxRetries = 5) {
+            let attempt = 0;
+            while (attempt < maxRetries) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (response.ok) {
+                        return await response.json();
+                    }
+
+                    if (response.status === 429 || response.status >= 500) {
+                        throw new Error(`Server error or rate limit: ${response.status}`);
+                    }
+
+                    const errorJson = await response.json();
+                    throw new Error(`API Error: ${errorJson.error?.message || 'Unknown error'}`);
+
+                } catch (error) {
+                    attempt++;
+                    console.warn(`Attempt ${attempt} failed: ${error.message}`);
+                    if (attempt >= maxRetries) {
+                        throw new Error(`Gagal membuat gambar setelah ${maxRetries} kali percobaan. Error: ${error.message}`);
+                    }
+                    const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+        
+        // Download function fix
+        window.downloadImage = () => {
+            if (!currentImageUrl) {
+                showMessage('Tidak ada gambar yang dihasilkan untuk diunduh.', 'bg-yellow-100 text-yellow-700');
+                return;
+            }
+            // Use programmatic click workaround for reliable Base64 download
+            const link = document.createElement('a');
+            link.href = currentImageUrl;
+            link.download = 'ai_image_gemini_face_studio.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showMessage('Sedang mengunduh gambar...', 'bg-green-100 text-green-700');
+        };
+
+
+        // Function to call the AI for image generation
+        async function generateSingleImage(promptText) {
+            const parts = [
+                { text: promptText },
+                { inlineData: { mimeType: modelImageMimeType, data: modelImageBase64 } } // Primary Model Image
+            ];
+
+            const payload = {
+                contents: [{ parts: parts }],
+                generationConfig: {
+                    responseModalities: ['IMAGE'],
+                },
+                systemInstruction: {
+                    parts: [{ text: "You are an expert image generation model. Re-render the subject of the first image based on the text prompt." }]
+                }
+            };
+
+            const result = await fetchWithRetry(NANO_BANANA_URL, payload);
+            
+            const candidate = result.candidates?.[0];
+            const base64Data = candidate?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+            
+            if (!base64Data) {
+                throw new Error("Respons API tidak mengandung data gambar yang valid.");
+            }
+
+            return `data:image/png;base64,${base64Data}`;
+        }
+
+        // Main generation function (handles one call)
+        window.startGeneration = async () => {
+            if (!modelImageBase64) {
+                showMessage('Harap unggah Foto Model terlebih dahulu.', 'bg-yellow-100 text-yellow-700');
+                return;
+            }
+
+            const promptText = document.getElementById('ai-prompt').value;
+            if (!promptText) {
+                showMessage('Prompt tidak boleh kosong. Harap perbarui pengaturan.', 'bg-yellow-100 text-yellow-700');
+                return;
+            }
+            
+            // Elements
+            const generateButton = document.getElementById('generate-button');
+            const generateText = document.getElementById('generate-text');
+            const generateLoading = document.getElementById('generate-loading');
+            const outputImage = document.getElementById('output-image');
+            const initialPlaceholder = document.getElementById('initial-placeholder');
+            const downloadArea = document.getElementById('download-area');
+            
+            // Reset/Set Loading State
+            currentImageUrl = null;
+            generateButton.disabled = true;
+            generateText.classList.add('hidden');
+            generateLoading.classList.remove('hidden');
+            initialPlaceholder.innerHTML = '<div class="loading-spinner mb-2"></div> Memuat Gambar... Proses mungkin memakan waktu hingga 20 detik.';
+            initialPlaceholder.classList.remove('hidden');
+            outputImage.classList.add('hidden');
+            downloadArea.classList.add('hidden');
+            showMessage('⏳ Memulai pembuatan gambar...', 'bg-blue-100 text-blue-700');
+
+            try {
+                // Generate Image
+                const imageUrl = await generateSingleImage(promptText);
+
+                // Store and Display Result
+                currentImageUrl = imageUrl;
+                outputImage.src = imageUrl;
+                outputImage.classList.remove('hidden');
+                initialPlaceholder.classList.add('hidden');
+                
+                // Enable Download
+                downloadArea.classList.remove('hidden');
+                
+                showMessage('✅ Gambar berhasil dibuat!', 'bg-green-100 text-green-700');
+
+            } catch (error) {
+                console.error("Kesalahan Generasi Gambar:", error);
+                showMessage(`❌ ${error.message}`, 'bg-red-100 text-red-700');
+                initialPlaceholder.textContent = 'Gagal menampilkan hasil. Silakan coba lagi.';
+                initialPlaceholder.classList.remove('hidden');
+                outputImage.classList.add('hidden');
+                downloadArea.classList.add('hidden');
+            } finally {
+                // Reset Loading State
+                generateButton.disabled = false;
+                generateText.classList.remove('hidden');
+                generateLoading.classList.add('hidden');
+            }
+        };
+        
+        // Initialize prompt on load
+        window.onload = () => {
+            updatePrompt();
+        };
+
+    </script>
+</body>
+</html>
+
